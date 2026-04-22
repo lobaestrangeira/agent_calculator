@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC P2P Calculator</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface-2: #1a1a26;
+    --surface-3: #222233;
+    --border: #2a2a3d;
+    --text: #e8e8f0;
+    --text-dim: #8888aa;
+    --text-muted: #555570;
+    --btc: #f7931a;
+    --btc-glow: #f7931a40;
+    --green: #00e676;
+    --green-dim: #00e67630;
+    --red: #ff5252;
+    --red-dim: #ff525230;
+    --yellow: #ffd740;
+    --yellow-dim: #ffd74030;
+    --blue: #448aff;
+    --blue-dim: #448aff30;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .noise-overlay {
+    position: fixed; inset: 0; opacity: 0.03; pointer-events: none; z-index: 9999;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .app-container { max-width: 480px; margin: 0 auto; min-height: 100vh; }
+
+  /* Header */
+  .header {
+    padding: 20px 20px 16px;
+    background: linear-gradient(180deg, #12121a 0%, transparent 100%);
+    position: sticky; top: 0; z-index: 100;
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  }
+  .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon {
+    width: 32px; height: 32px; background: var(--btc); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 16px; color: #000;
+    box-shadow: 0 0 20px var(--btc-glow);
+  }
+  .logo-text { font-weight: 600; font-size: 15px; letter-spacing: -0.5px; font-family: monospace; }
+  .logo-text span { color: var(--btc); }
+  .live-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); font-family: monospace; }
+  .live-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;box-shadow:0 0 4px var(--green)} 50%{opacity:0.4;box-shadow:none} }
+
+  /* Ticker */
+  .ticker-bar {
+    display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+    background: var(--surface); border-radius: 10px; margin: 8px 20px 0;
+    border: 1px solid var(--border); overflow-x: auto; scrollbar-width: none;
+  }
+  .ticker-bar::-webkit-scrollbar { display: none; }
+  .ticker-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; font-family: monospace; }
+  .ticker-label { color: var(--text-muted); }
+  .ticker-value { color: var(--text); font-weight: 500; }
+
+  /* Sections */
+  .section { padding: 0 20px; margin-top: 20px; }
+  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 10px; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+
+  /* Country Selector */
+  .country-select-wrapper { position: relative; }
+  .country-select {
+    width: 100%; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; color: var(--text); font-size: 15px; appearance: none; cursor: pointer;
+    font-family: inherit;
+  }
+  .country-select:focus { outline: none; border-color: var(--btc); box-shadow: 0 0 0 3px var(--btc-glow); }
+  .select-arrow { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none; font-size: 12px; }
+
+  /* Direction Toggle */
+  .direction-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 4px; }
+  .direction-btn {
+    padding: 12px; border: none; border-radius: 9px; background: transparent;
+    color: var(--text-dim); font-size: 14px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    font-family: inherit; transition: all 0.25s;
+  }
+  .direction-btn.active { background: var(--surface-3); color: var(--text); }
+  .direction-btn.active.buy { background: var(--green-dim); color: var(--green); }
+  .direction-btn.active.sell { background: var(--red-dim); color: var(--red); }
+
+  /* Input */
+  .input-group { position: relative; }
+  .input-label { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; font-weight: 500; }
+  .input-field {
+    width: 100%; padding: 14px 16px; padding-right: 70px;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-family: monospace; font-size: 18px; font-weight: 500;
+  }
+  .input-field:focus { outline: none; border-color: var(--btc); box-shadow: 0 0 0 3px var(--btc-glow); }
+  .input-field::placeholder { color: var(--text-muted); }
+  .input-suffix { position: absolute; right: 16px; bottom: 14px; font-family: monospace; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+
+  /* Rate Display */
+  .rate-display { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .rate-box { background: var(--surface-2); border-radius: 10px; padding: 12px; text-align: center; }
+  .rate-box-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 4px; }
+  .rate-box-value { font-family: monospace; font-size: 14px; font-weight: 600; }
+  .rate-box-value.buy-rate { color: var(--green); }
+  .rate-box-value.sell-rate { color: var(--red); }
+
+  .spread-indicator {
+    background: var(--surface-2); border-radius: 10px; padding: 10px 14px; margin-top: 8px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .spread-label { font-size: 11px; color: var(--text-muted); }
+  .spread-value { font-family: monospace; font-size: 13px; font-weight: 600; color: var(--yellow); }
+
+  .rate-source { font-size: 10px; color: var(--text-muted); margin-top: 6px; text-align: center; font-family: monospace; }
+
+  /* Margin */
+  .margin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .margin-value-display { display: flex; align-items: baseline; gap: 4px; }
+  .margin-pct { font-family: monospace; font-size: 22px; font-weight: 700; color: var(--btc); }
+  .margin-pct-sign { font-family: monospace; font-size: 14px; color: var(--text-dim); }
+  .margin-badge { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; font-family: monospace; }
+  .margin-badge.low { background: var(--blue-dim); color: var(--blue); }
+  .margin-badge.avg { background: var(--green-dim); color: var(--green); }
+  .margin-badge.high { background: var(--yellow-dim); color: var(--yellow); }
+  .margin-badge.very-high { background: var(--red-dim); color: var(--red); }
+
+  .slider-wrapper { position: relative; padding: 4px 0; }
+  .slider-track-bg { position: relative; height: 6px; background: var(--surface-3); border-radius: 3px; margin-bottom: 6px; }
+  .slider-avg-marker { position: absolute; top: -4px; width: 2px; height: 14px; background: var(--text-dim); border-radius: 1px; z-index: 2; transition: left 0.3s; }
+  .slider-avg-label { position: absolute; top: 16px; transform: translateX(-50%); font-size: 9px; font-family: monospace; color: var(--text-muted); white-space: nowrap; }
+
+  input[type="range"] {
+    width: 100%; -webkit-appearance: none; appearance: none; background: transparent;
+    cursor: pointer; position: relative; z-index: 3; margin-top: -6px; height: 6px;
+  }
+  input[type="range"]::-webkit-slider-runnable-track { height: 6px; background: transparent; border-radius: 3px; }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 22px; height: 22px; background: var(--btc);
+    border-radius: 50%; border: 3px solid var(--bg); margin-top: -8px;
+    box-shadow: 0 0 10px var(--btc-glow);
+  }
+  input[type="range"]::-moz-range-track { height: 6px; background: transparent; border-radius: 3px; }
+  input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; background: var(--btc); border-radius: 50%;
+    border: 3px solid var(--bg); box-shadow: 0 0 10px var(--btc-glow);
+  }
+
+  .margin-input-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .margin-input {
+    width: 80px; padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--btc); font-family: monospace; font-size: 15px;
+    font-weight: 600; text-align: center;
+  }
+  .margin-input:focus { outline: none; border-color: var(--btc); }
+  .margin-hint { font-size: 11px; color: var(--text-muted); flex: 1; }
+
+  /* Quick amounts */
+  .quick-amounts { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .quick-amt-btn {
+    padding: 6px 12px; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text-dim); font-family: monospace; font-size: 12px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .quick-amt-btn:hover { border-color: var(--btc); color: var(--btc); }
+
+  /* Results */
+  .results-card {
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+    border: 1px solid var(--border); border-radius: 16px; padding: 20px;
+    position: relative; overflow: hidden;
+  }
+  .results-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--btc), var(--yellow), var(--btc)); }
+
+  .result-main { text-align: center; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .result-main-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 6px; }
+  .result-main-value { font-family: monospace; font-size: 28px; font-weight: 700; color: var(--btc); line-height: 1.1; }
+  .result-main-sub { font-family: monospace; font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .result-item { background: var(--surface-2); border-radius: 10px; padding: 12px; text-align: center; }
+  .result-item-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 4px; }
+  .result-item-value { font-family: monospace; font-size: 14px; font-weight: 600; color: var(--text); word-break: break-all; }
+
+  .profit-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px; background: var(--surface-2); border-radius: 10px; margin-top: 10px;
+  }
+  .profit-label { font-size: 13px; color: var(--text-dim); }
+  .profit-value { font-family: monospace; font-size: 16px; font-weight: 700; }
+  .profit-value.positive { color: var(--green); }
+  .profit-value.negative { color: var(--red); }
+
+  /* Status bar */
+  .api-status {
+    margin: 8px 20px 0; padding: 8px 12px; border-radius: 8px; font-size: 11px;
+    font-family: monospace; display: flex; align-items: center; gap: 8px;
+  }
+  .api-status.loading { background: var(--yellow-dim); color: var(--yellow); }
+  .api-status.success { background: var(--green-dim); color: var(--green); }
+  .api-status.error { background: var(--red-dim); color: var(--red); }
+  .api-status .spinner { width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Footer */
+  .footer { padding: 20px; text-align: center; margin-top: 20px; margin-bottom: 40px; }
+  .footer-text { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+  .refresh-btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text-dim); font-size: 13px; cursor: pointer; margin-bottom: 10px;
+    font-family: inherit;
+  }
+  .refresh-btn:hover { border-color: var(--btc); color: var(--btc); }
+
+  .loading-shimmer {
+    background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+    background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; height: 20px;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .fade-in { animation: fadeIn 0.4s ease forwards; }
+
+  .source-pills { display: flex; gap: 4px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
+  .source-pill {
+    font-size: 9px; padding: 2px 8px; border-radius: 10px; font-family: monospace;
+    background: var(--surface-3); color: var(--text-muted); border: 1px solid var(--border);
+  }
+  .source-pill.active { border-color: var(--green); color: var(--green); }
+  .source-pill.failed { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+<div class="noise-overlay"></div>
+<div class="app-container">
+
+  <div class="header">
+    <div class="header-top">
+      <div class="logo">
+        <div class="logo-icon">₿</div>
+        <div class="logo-text"><span>P2P</span> Calc</div>
+      </div>
+      <div class="live-badge">
+        <div class="live-dot"></div>
+        <span id="lastUpdate">Loading...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="ticker-bar">
+    <div class="ticker-item"><span class="ticker-label">BTC/USD</span><span class="ticker-value" id="tickerBtcUsd">--</span></div>
+    <div class="ticker-item"><span class="ticker-label">24h</span><span class="ticker-value" id="ticker24h" style="color:var(--green)">--</span></div>
+    <div class="ticker-item"><span class="ticker-label">Sats/$</span><span class="ticker-value" id="tickerSatsUsd">--</span></div>
+  </div>
+
+  <div id="apiStatus" class="api-status loading" style="display:none">
+    <div class="spinner"></div>
+    <span id="apiStatusText">Fetching live rates...</span>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Your Region</div>
+    <div class="country-select-wrapper">
+      <select class="country-select" id="countrySelect"><option value="">Select your country...</option></select>
+      <span class="select-arrow">▾</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Transaction Type</div>
+    <div class="direction-toggle">
+      <button class="direction-btn buy active" id="btnBuy" onclick="setDirection('buy')"><span>⬇</span> Buy BTC</button>
+      <button class="direction-btn sell" id="btnSell" onclick="setDirection('sell')"><span>⬆</span> Sell BTC</button>
+    </div>
+  </div>
+
+  <div class="section" id="ratesSection" style="display:none">
+    <div class="section-label">P2P Market Rates</div>
+    <div class="card">
+      <div class="rate-display">
+        <div class="rate-box"><div class="rate-box-label">P2P Buy Price</div><div class="rate-box-value buy-rate" id="p2pBuyRate">--</div></div>
+        <div class="rate-box"><div class="rate-box-label">P2P Sell Price</div><div class="rate-box-value sell-rate" id="p2pSellRate">--</div></div>
+      </div>
+      <div class="spread-indicator">
+        <span class="spread-label">Avg Spread</span>
+        <span class="spread-value" id="spreadValue">--</span>
+      </div>
+      <div class="spread-indicator" style="margin-top:6px">
+        <span class="spread-label">Yadio Market Rate</span>
+        <span class="spread-value" id="yadioRate" style="color:var(--text)">--</span>
+      </div>
+      <div class="source-pills" id="sourcePills"></div>
+      <div class="rate-source" id="rateSource">Loading rate sources...</div>
+    </div>
+  </div>
+
+  <div class="section" id="amountSection" style="display:none">
+    <div class="section-label">Amount</div>
+    <div class="card">
+      <div class="input-group">
+        <div class="input-label">Enter amount in local currency</div>
+        <input type="text" inputmode="decimal" class="input-field" id="amountInput" placeholder="0.00">
+        <span class="input-suffix" id="currencySuffix">---</span>
+      </div>
+      <div class="quick-amounts" id="quickAmounts"></div>
+    </div>
+  </div>
+
+  <div class="section" id="marginSection" style="display:none">
+    <div class="section-label">Your Margin</div>
+    <div class="card">
+      <div class="margin-header">
+        <div class="margin-value-display">
+          <span class="margin-pct" id="marginPctDisplay">3.0</span>
+          <span class="margin-pct-sign">%</span>
+        </div>
+        <span class="margin-badge avg" id="marginBadge">AVERAGE</span>
+      </div>
+      <div class="slider-wrapper">
+        <div class="slider-track-bg">
+          <div class="slider-avg-marker" id="avgMarker"><span class="slider-avg-label" id="avgMarkerLabel">avg 3%</span></div>
+        </div>
+        <input type="range" id="marginSlider" min="0" max="15" step="0.1" value="3">
+      </div>
+      <div class="margin-input-row">
+        <input type="text" inputmode="decimal" class="margin-input" id="marginInput" value="3.0">
+        <span class="margin-hint" id="marginHint">In the average range for your region</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" id="resultsSection" style="display:none">
+    <div class="section-label">Conversion Result</div>
+    <div class="results-card fade-in">
+      <div class="result-main">
+        <div class="result-main-label" id="resultLabel">You receive</div>
+        <div class="result-main-value" id="resultBtc">0.00000000 BTC</div>
+        <div class="result-main-sub" id="resultFiat">@ 0 per BTC</div>
+      </div>
+      <div class="result-grid">
+        <div class="result-item"><div class="result-item-label">Sats</div><div class="result-item-value" id="resultSats">0</div></div>
+        <div class="result-item"><div class="result-item-label">kSats</div><div class="result-item-value" id="resultKsats">0</div></div>
+        <div class="result-item"><div class="result-item-label">mSats</div><div class="result-item-value" id="resultMsats">0</div></div>
+        <div class="result-item"><div class="result-item-label" id="fiatEquivLabel">USD Equiv</div><div class="result-item-value" id="resultUsdEquiv">$0.00</div></div>
+      </div>
+      <div class="profit-row">
+        <span class="profit-label" id="profitLabel">Your margin earnings</span>
+        <span class="profit-value positive" id="profitValue">+0.00</span>
+      </div>
+      <div class="profit-row" style="margin-top:6px">
+        <span class="profit-label">Client pays / receives</span>
+        <span class="profit-value" id="clientTotal" style="color:var(--text)">0.00</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <button class="refresh-btn" onclick="refreshRates()">↻ Refresh Rates</button>
+    <div class="footer-text">Live data from Yadio.io + Binance P2P · Not financial advice</div>
+  </div>
+</div>
+
+<script>
+// ──────────────────────────────────────────
+// Country configuration
+// avgMargin = typical P2P agent margin in the region
+// quickAmts = common transaction amounts
+// ──────────────────────────────────────────
+const COUNTRIES = {
+  NG: { name: "Nigeria", flag: "🇳🇬", currency: "NGN", symbol: "₦", avgMargin: 3.5, quickAmts: [50000,100000,500000,1000000] },
+  KE: { name: "Kenya", flag: "🇰🇪", currency: "KES", symbol: "KSh", avgMargin: 3.0, quickAmts: [10000,50000,100000,500000] },
+  GH: { name: "Ghana", flag: "🇬🇭", currency: "GHS", symbol: "GH₵", avgMargin: 4.0, quickAmts: [500,1000,5000,10000] },
+  ZA: { name: "South Africa", flag: "🇿🇦", currency: "ZAR", symbol: "R", avgMargin: 2.0, quickAmts: [1000,5000,10000,50000] },
+  TZ: { name: "Tanzania", flag: "🇹🇿", currency: "TZS", symbol: "TSh", avgMargin: 4.5, quickAmts: [100000,500000,1000000,5000000] },
+  BR: { name: "Brazil", flag: "🇧🇷", currency: "BRL", symbol: "R$", avgMargin: 2.3, quickAmts: [500,1000,5000,10000] },
+  AR: { name: "Argentina", flag: "🇦🇷", currency: "ARS", symbol: "$", avgMargin: 6.5, quickAmts: [100000,500000,1000000,5000000] },
+  CO: { name: "Colombia", flag: "🇨🇴", currency: "COP", symbol: "$", avgMargin: 2.8, quickAmts: [200000,500000,1000000,5000000] },
+  VE: { name: "Venezuela", flag: "🇻🇪", currency: "VES", symbol: "Bs.", avgMargin: 8.0, quickAmts: [500,1000,5000,10000] },
+  MX: { name: "Mexico", flag: "🇲🇽", currency: "MXN", symbol: "$", avgMargin: 1.7, quickAmts: [1000,5000,10000,50000] },
+  PE: { name: "Peru", flag: "🇵🇪", currency: "PEN", symbol: "S/", avgMargin: 2.6, quickAmts: [500,1000,5000,10000] },
+  IN: { name: "India", flag: "🇮🇳", currency: "INR", symbol: "₹", avgMargin: 1.6, quickAmts: [5000,10000,50000,100000] },
+  PH: { name: "Philippines", flag: "🇵🇭", currency: "PHP", symbol: "₱", avgMargin: 2.4, quickAmts: [5000,10000,50000,100000] },
+  VN: { name: "Vietnam", flag: "🇻🇳", currency: "VND", symbol: "₫", avgMargin: 2.8, quickAmts: [1000000,5000000,10000000,50000000] },
+  PK: { name: "Pakistan", flag: "🇵🇰", currency: "PKR", symbol: "₨", avgMargin: 3.2, quickAmts: [10000,50000,100000,500000] },
+  EG: { name: "Egypt", flag: "🇪🇬", currency: "EGP", symbol: "E£", avgMargin: 4.8, quickAmts: [5000,10000,50000,100000] },
+  TR: { name: "Turkey", flag: "🇹🇷", currency: "TRY", symbol: "₺", avgMargin: 2.0, quickAmts: [1000,5000,10000,50000] },
+  UA: { name: "Ukraine", flag: "🇺🇦", currency: "UAH", symbol: "₴", avgMargin: 2.8, quickAmts: [5000,10000,50000,100000] },
+  RU: { name: "Russia", flag: "🇷🇺", currency: "RUB", symbol: "₽", avgMargin: 3.2, quickAmts: [10000,50000,100000,500000] },
+  ID: { name: "Indonesia", flag: "🇮🇩", currency: "IDR", symbol: "Rp", avgMargin: 2.0, quickAmts: [500000,1000000,5000000,10000000] },
+  TH: { name: "Thailand", flag: "🇹🇭", currency: "THB", symbol: "฿", avgMargin: 1.6, quickAmts: [1000,5000,10000,50000] },
+  ET: { name: "Ethiopia", flag: "🇪🇹", currency: "ETB", symbol: "Br", avgMargin: 5.5, quickAmts: [10000,50000,100000,500000] },
+  SV: { name: "El Salvador", flag: "🇸🇻", currency: "USD", symbol: "$", avgMargin: 1.2, quickAmts: [50,100,500,1000] },
+  GT: { name: "Guatemala", flag: "🇬🇹", currency: "GTQ", symbol: "Q", avgMargin: 3.6, quickAmts: [500,1000,5000,10000] },
+  HN: { name: "Honduras", flag: "🇭🇳", currency: "HNL", symbol: "L", avgMargin: 4.0, quickAmts: [1000,5000,10000,50000] },
+  CU: { name: "Cuba", flag: "🇨🇺", currency: "CUP", symbol: "$", avgMargin: 11.5, quickAmts: [5000,10000,50000,100000] },
+  DO: { name: "Dominican Republic", flag: "🇩🇴", currency: "DOP", symbol: "RD$", avgMargin: 2.4, quickAmts: [5000,10000,50000,100000] },
+  LB: { name: "Lebanon", flag: "🇱🇧", currency: "LBP", symbol: "L£", avgMargin: 6.2, quickAmts: [5000000,10000000,50000000,100000000] },
+  CM: { name: "Cameroon", flag: "🇨🇲", currency: "XAF", symbol: "FCFA", avgMargin: 4.8, quickAmts: [50000,100000,500000,1000000] },
+  SN: { name: "Senegal", flag: "🇸🇳", currency: "XOF", symbol: "CFA", avgMargin: 4.3, quickAmts: [50000,100000,500000,1000000] },
+};
+
+// State
+let state = {
+  btcUsdPrice: 0,
+  country: null,
+  direction: 'buy',
+  amount: 0,
+  margin: 3.0,
+  yadioRate: 0,       // BTC price in local currency from Yadio
+  binanceBuy: 0,      // Binance P2P avg buy price
+  binanceSell: 0,     // Binance P2P avg sell price
+  sources: { yadio: 'pending', binance: 'pending' },
+};
+
+// ──────────────────────────────────────────
+// API: Yadio.io — free-market exchange rates
+// ──────────────────────────────────────────
+async function fetchYadioRate(currency) {
+  try {
+    // Yadio provides BTC rate for any fiat
+    const resp = await fetch(`https://api.yadio.io/exrates/${currency}`);
+    if (!resp.ok) throw new Error(`Yadio HTTP ${resp.status}`);
+    const data = await resp.json();
+    // data.BTC = how many units of currency per 1 BTC
+    // data.USD = how many units of currency per 1 USD
+    if (data && data.BTC) {
+      state.yadioRate = data.BTC;
+      state.btcUsdPrice = data.BTC / (data.USD || 1);
+      state.sources.yadio = 'ok';
+      return data;
+    }
+    throw new Error('No BTC rate in Yadio response');
+  } catch (e) {
+    console.warn('Yadio API error:', e.message);
+    state.sources.yadio = 'error';
+    // Fallback: try the /rate endpoint
+    try {
+      const resp2 = await fetch(`https://api.yadio.io/rate/${currency}`);
+      if (!resp2.ok) throw new Error(`Yadio rate HTTP ${resp2.status}`);
+      const data2 = await resp2.json();
+      if (data2 && data2.rate) {
+        state.yadioRate = data2.rate;
+        state.sources.yadio = 'ok';
+        return data2;
+      }
+    } catch (e2) {
+      console.warn('Yadio fallback error:', e2.message);
+    }
+    return null;
+  }
+}
+
+// ──────────────────────────────────────────
+// API: Binance P2P — public ad listing
+// ──────────────────────────────────────────
+async function fetchBinanceP2P(fiat, tradeType) {
+  try {
+    const resp = await fetch('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fiat: fiat,
+        page: 1,
+        rows: 10,
+        tradeType: tradeType, // "BUY" or "SELL"
+        asset: "USDT",
+        countries: [],
+        proMerchantAds: false,
+        shieldMerchantAds: false,
+        publisherType: null,
+        payTypes: [],
+        classifies: ["mass", "profession", "fiat_trade"]
+      })
+    });
+    if (!resp.ok) throw new Error(`Binance P2P HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (data && data.data && data.data.length > 0) {
+      // Extract prices from top ads
+      const prices = data.data
+        .map(ad => parseFloat(ad.adv?.price || 0))
+        .filter(p => p > 0);
+      if (prices.length > 0) {
+        // Return average of top ads
+        const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+        return avg;
+      }
+    }
+    return null;
+  } catch (e) {
+    console.warn(`Binance P2P ${tradeType} error:`, e.message);
+    return null;
+  }
+}
+
+async function fetchBinanceRates(fiat) {
+  try {
+    const [buyAvg, sellAvg] = await Promise.all([
+      fetchBinanceP2P(fiat, 'BUY'),
+      fetchBinanceP2P(fiat, 'SELL')
+    ]);
+    
+    if (buyAvg || sellAvg) {
+      state.sources.binance = 'ok';
+      // Binance P2P quotes USDT price. Convert to BTC using BTC/USDT
+      // For now, use the USDT price as an approximation of the local spread
+      if (buyAvg) state.binanceBuy = buyAvg;
+      if (sellAvg) state.binanceSell = sellAvg;
+    } else {
+      state.sources.binance = 'error';
+    }
+  } catch (e) {
+    console.warn('Binance P2P error:', e.message);
+    state.sources.binance = 'error';
+  }
+}
+
+// ──────────────────────────────────────────
+// Fallback: CoinGecko for BTC/USD spot
+// ──────────────────────────────────────────
+async function fetchBtcSpot() {
+  try {
+    const resp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true');
+    if (!resp.ok) throw new Error('CoinGecko failed');
+    const data = await resp.json();
+    if (data.bitcoin) {
+      state.btcUsdPrice = data.bitcoin.usd;
+      return data.bitcoin;
+    }
+  } catch (e) {
+    console.warn('CoinGecko error:', e.message);
+  }
+  return null;
+}
+
+// ──────────────────────────────────────────
+// Load all rates for a country
+// ──────────────────────────────────────────
+async function loadRates(countryCode) {
+  const c = COUNTRIES[countryCode];
+  if (!c) return;
+
+  state.sources = { yadio: 'loading', binance: 'loading' };
+  showApiStatus('loading', `Fetching live rates for ${c.currency}...`);
+  updateSourcePills();
+
+  // Fetch BTC/USD spot first
+  await fetchBtcSpot();
+
+  // Fetch in parallel: Yadio + Binance P2P
+  await Promise.allSettled([
+    fetchYadioRate(c.currency),
+    fetchBinanceRates(c.currency)
+  ]);
+
+  // Determine effective rate
+  // If Yadio has a BTC rate in local currency, use it as the market rate
+  // If Binance has P2P USDT rates, compute BTC/local from USDT rates × BTC/USDT
+  computeEffectiveRates(c);
+  updateSourcePills();
+
+  const okSources = Object.values(state.sources).filter(s => s === 'ok').length;
+  if (okSources > 0) {
+    showApiStatus('success', `Live rates loaded (${okSources} source${okSources > 1 ? 's' : ''})`);
+    setTimeout(() => hideApiStatus(), 3000);
+  } else {
+    showApiStatus('error', 'APIs unavailable — using estimated rates');
+    // Use fallback estimates
+    useFallbackRates(c);
+  }
+}
+
+function computeEffectiveRates(c) {
+  let btcLocal = 0;
+  let p2pBuy = 0;
+  let p2pSell = 0;
+
+  // Yadio: gives us the real free-market BTC/LOCAL rate
+  if (state.yadioRate > 0) {
+    btcLocal = state.yadioRate;
+  }
+
+  // Binance: gives USDT/LOCAL P2P rates. Convert to BTC/LOCAL
+  // BTC/LOCAL = USDT/LOCAL × BTC/USDT
+  // BTC/USDT ≈ state.btcUsdPrice (close enough)
+  if (state.binanceBuy > 0 && state.btcUsdPrice > 0) {
+    p2pBuy = state.binanceBuy * state.btcUsdPrice;
+  }
+  if (state.binanceSell > 0 && state.btcUsdPrice > 0) {
+    p2pSell = state.binanceSell * state.btcUsdPrice;
+  }
+
+  // If we have Yadio but no Binance, estimate P2P from Yadio with typical spread
+  if (btcLocal > 0 && p2pBuy === 0) {
+    p2pBuy = btcLocal * (1 + c.avgMargin * 0.6 / 100);  // buyers pay more
+    p2pSell = btcLocal * (1 - c.avgMargin * 0.4 / 100);  // sellers get less
+  }
+
+  // If we have Binance but no Yadio, derive market rate from midpoint
+  if (btcLocal === 0 && p2pBuy > 0 && p2pSell > 0) {
+    btcLocal = (p2pBuy + p2pSell) / 2;
+  }
+
+  state.yadioRate = btcLocal;
+  state.p2pBuyRate = p2pBuy || btcLocal * 1.02;
+  state.p2pSellRate = p2pSell || btcLocal * 0.98;
+}
+
+function useFallbackRates(c) {
+  // Last resort: estimate from BTC/USD and rough forex
+  if (state.btcUsdPrice === 0) state.btcUsdPrice = 68000;
+  const fallbackFx = {
+    NGN:1580, KES:129, GHS:15.8, ZAR:18.2, TZS:2680, BRL:5.05, ARS:1050,
+    COP:3950, VES:42, MXN:17.2, PEN:3.72, INR:83.5, PHP:56.8, VND:25350,
+    PKR:278, EGP:49, TRY:32.5, UAH:41.5, RUB:92, IDR:15900, THB:35.8,
+    ETB:127, USD:1, GTQ:7.75, HNL:24.8, CUP:120, DOP:58.5, LBP:89500,
+    XAF:610, XOF:610
+  };
+  const fx = fallbackFx[c.currency] || 1;
+  state.yadioRate = state.btcUsdPrice * fx;
+  state.p2pBuyRate = state.yadioRate * (1 + c.avgMargin * 0.6 / 100);
+  state.p2pSellRate = state.yadioRate * (1 - c.avgMargin * 0.4 / 100);
+}
+
+// ──────────────────────────────────────────
+// UI helpers
+// ──────────────────────────────────────────
+function showApiStatus(type, msg) {
+  const el = document.getElementById('apiStatus');
+  el.style.display = 'flex';
+  el.className = `api-status ${type}`;
+  document.getElementById('apiStatusText').textContent = msg;
+  if (type === 'loading') {
+    el.innerHTML = `<div class="spinner"></div><span>${msg}</span>`;
+  } else {
+    el.innerHTML = `<span>${type === 'success' ? '✓' : '⚠'} ${msg}</span>`;
+  }
+}
+
+function hideApiStatus() {
+  document.getElementById('apiStatus').style.display = 'none';
+}
+
+function updateSourcePills() {
+  const el = document.getElementById('sourcePills');
+  el.innerHTML = '';
+  const sources = [
+    { name: 'Yadio.io', key: 'yadio' },
+    { name: 'Binance P2P', key: 'binance' }
+  ];
+  sources.forEach(s => {
+    const pill = document.createElement('span');
+    pill.className = `source-pill ${state.sources[s.key] === 'ok' ? 'active' : state.sources[s.key] === 'error' ? 'failed' : ''}`;
+    pill.textContent = `${s.name} ${state.sources[s.key] === 'ok' ? '✓' : state.sources[s.key] === 'error' ? '✗' : '…'}`;
+    el.appendChild(pill);
+  });
+}
+
+function show(id) { document.getElementById(id).style.display = 'block'; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+function formatNum(n) {
+  if (typeof n === 'string') n = parseFloat(n);
+  if (isNaN(n)) return '0';
+  return n.toLocaleString('en-US', { maximumFractionDigits: 8 });
+}
+
+function formatCompact(n) {
+  if (n >= 1e9) return (n/1e9).toFixed(0)+'B';
+  if (n >= 1e6) return (n/1e6).toFixed(0)+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(0)+'K';
+  return n.toString();
+}
+
+// ──────────────────────────────────────────
+// Init & Events
+// ──────────────────────────────────────────
+function init() {
+  populateCountries();
+  updateTicker();
+  fetchBtcSpot().then(() => updateTicker());
+
+  document.getElementById('countrySelect').addEventListener('change', onCountryChange);
+  document.getElementById('amountInput').addEventListener('input', onAmountInput);
+  document.getElementById('marginSlider').addEventListener('input', onSliderInput);
+  document.getElementById('marginInput').addEventListener('input', onMarginInput);
+  document.getElementById('marginInput').addEventListener('blur', onMarginBlur);
+}
+
+function populateCountries() {
+  const sel = document.getElementById('countrySelect');
+  Object.entries(COUNTRIES)
+    .sort((a, b) => a[1].name.localeCompare(b[1].name))
+    .forEach(([code, c]) => {
+      const opt = document.createElement('option');
+      opt.value = code;
+      opt.textContent = `${c.flag} ${c.name} (${c.currency})`;
+      sel.appendChild(opt);
+    });
+}
+
+async function onCountryChange(e) {
+  const code = e.target.value;
+  if (!code) {
+    state.country = null;
+    hide('ratesSection'); hide('amountSection'); hide('marginSection'); hide('resultsSection');
+    return;
+  }
+  state.country = code;
+  state.margin = COUNTRIES[code].avgMargin;
+  document.getElementById('marginSlider').value = state.margin;
+  document.getElementById('marginInput').value = state.margin.toFixed(1);
+
+  show('ratesSection'); show('amountSection'); show('marginSection');
+
+  // Fetch live rates
+  await loadRates(code);
+  updateAll();
+}
+
+function setDirection(dir) {
+  state.direction = dir;
+  document.getElementById('btnBuy').classList.toggle('active', dir === 'buy');
+  document.getElementById('btnSell').classList.toggle('active', dir === 'sell');
+  document.getElementById('btnBuy').classList.toggle('buy', dir === 'buy');
+  document.getElementById('btnSell').classList.toggle('sell', dir === 'sell');
+  updateAll();
+}
+
+function onAmountInput(e) {
+  const raw = e.target.value.replace(/[^0-9.]/g, '');
+  state.amount = parseFloat(raw) || 0;
+  calculate();
+}
+
+function onSliderInput(e) {
+  state.margin = parseFloat(e.target.value);
+  document.getElementById('marginInput').value = state.margin.toFixed(1);
+  updateMarginUI();
+  calculate();
+}
+
+function onMarginInput(e) {
+  const val = parseFloat(e.target.value);
+  if (!isNaN(val) && val >= 0 && val <= 15) {
+    state.margin = val;
+    document.getElementById('marginSlider').value = val;
+    updateMarginUI();
+    calculate();
+  }
+}
+
+function onMarginBlur(e) { e.target.value = state.margin.toFixed(1); }
+
+function setQuickAmount(amt) {
+  state.amount = amt;
+  document.getElementById('amountInput').value = formatNum(amt);
+  calculate();
+}
+
+// ──────────────────────────────────────────
+// Display updates
+// ──────────────────────────────────────────
+function updateAll() {
+  if (!state.country) return;
+  const c = COUNTRIES[state.country];
+  updateTicker();
+  updateRates(c);
+  updateAmountUI(c);
+  updateMarginUI();
+  calculate();
+}
+
+function updateTicker() {
+  const price = state.btcUsdPrice || 68000;
+  document.getElementById('tickerBtcUsd').textContent = '$' + formatNum(Math.round(price));
+  document.getElementById('tickerSatsUsd').textContent = formatNum(Math.round(1e8 / price));
+  document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function updateRates(c) {
+  const buyPrice = state.p2pBuyRate || 0;
+  const sellPrice = state.p2pSellRate || 0;
+
+  document.getElementById('p2pBuyRate').textContent = buyPrice > 0 ? c.symbol + formatNum(Math.round(buyPrice)) : '--';
+  document.getElementById('p2pSellRate').textContent = sellPrice > 0 ? c.symbol + formatNum(Math.round(sellPrice)) : '--';
+
+  if (buyPrice > 0 && sellPrice > 0) {
+    const spread = ((buyPrice - sellPrice) / sellPrice * 100).toFixed(1);
+    document.getElementById('spreadValue').textContent = spread + '%';
+  }
+
+  document.getElementById('yadioRate').textContent = state.yadioRate > 0 
+    ? c.symbol + formatNum(Math.round(state.yadioRate)) + '/BTC'
+    : '--';
+
+  const okSources = [];
+  if (state.sources.yadio === 'ok') okSources.push('Yadio.io');
+  if (state.sources.binance === 'ok') okSources.push('Binance P2P');
+  document.getElementById('rateSource').textContent = okSources.length > 0
+    ? `Live data from ${okSources.join(' + ')}`
+    : 'Using estimated rates (APIs unavailable)';
+}
+
+function updateAmountUI(c) {
+  document.getElementById('currencySuffix').textContent = c.currency;
+  const quickDiv = document.getElementById('quickAmounts');
+  quickDiv.innerHTML = '';
+  c.quickAmts.forEach(amt => {
+    const btn = document.createElement('button');
+    btn.className = 'quick-amt-btn';
+    btn.textContent = c.symbol + formatCompact(amt);
+    btn.onclick = () => setQuickAmount(amt);
+    quickDiv.appendChild(btn);
+  });
+}
+
+function updateMarginUI() {
+  if (!state.country) return;
+  const c = COUNTRIES[state.country];
+  const avgMargin = c.avgMargin;
+
+  document.getElementById('marginPctDisplay').textContent = state.margin.toFixed(1);
+
+  const marker = document.getElementById('avgMarker');
+  marker.style.left = (avgMargin / 15 * 100) + '%';
+  document.getElementById('avgMarkerLabel').textContent = 'avg ' + avgMargin + '%';
+
+  const badge = document.getElementById('marginBadge');
+  const hint = document.getElementById('marginHint');
+  const diff = state.margin - avgMargin;
+
+  if (state.margin < avgMargin * 0.6) {
+    badge.className = 'margin-badge low'; badge.textContent = 'LOW';
+    hint.textContent = 'Below market — attracts volume but low profit';
+  } else if (Math.abs(diff) <= avgMargin * 0.4) {
+    badge.className = 'margin-badge avg'; badge.textContent = 'AVERAGE';
+    hint.textContent = 'In the average range for your region';
+  } else if (state.margin < avgMargin * 1.8) {
+    badge.className = 'margin-badge high'; badge.textContent = 'HIGH';
+    hint.textContent = 'Above average — good profit, may reduce volume';
+  } else {
+    badge.className = 'margin-badge very-high'; badge.textContent = 'VERY HIGH';
+    hint.textContent = 'Most clients will choose cheaper agents';
+  }
+}
+
+function calculate() {
+  if (!state.country || state.amount <= 0) { hide('resultsSection'); return; }
+  show('resultsSection');
+
+  const c = COUNTRIES[state.country];
+  const marketRate = state.yadioRate || state.p2pBuyRate || 1;
+  const isBuy = state.direction === 'buy';
+
+  // Agent rate = market rate + agent's margin on top
+  const agentRate = marketRate * (1 + state.margin / 100);
+
+  let btcAmount, marginEarnings;
+
+  if (isBuy) {
+    btcAmount = state.amount / agentRate;
+    const btcAtMarket = state.amount / marketRate;
+    marginEarnings = (btcAtMarket - btcAmount) * marketRate;
+    document.getElementById('resultLabel').textContent = 'Client receives';
+    document.getElementById('profitLabel').textContent = 'Your margin earnings';
+    document.getElementById('clientTotal').textContent = c.symbol + formatNum(Math.round(state.amount)) + ' ' + c.currency;
+  } else {
+    btcAmount = state.amount / marketRate;
+    const clientReceives = state.amount / (1 + state.margin / 100);
+    marginEarnings = state.amount - clientReceives;
+    document.getElementById('resultLabel').textContent = 'BTC equivalent';
+    document.getElementById('profitLabel').textContent = 'Your margin earnings';
+    document.getElementById('clientTotal').textContent = c.symbol + formatNum(Math.round(state.amount - marginEarnings)) + ' ' + c.currency;
+  }
+
+  const sats = Math.round(btcAmount * 1e8);
+  const ksats = (sats / 1000).toFixed(1);
+  const msats = Math.round(sats * 1000);
+
+  document.getElementById('resultBtc').textContent = btcAmount.toFixed(8) + ' BTC';
+  document.getElementById('resultFiat').textContent = '@ ' + c.symbol + formatNum(Math.round(agentRate)) + ' per BTC';
+  document.getElementById('resultSats').textContent = formatNum(sats);
+  document.getElementById('resultKsats').textContent = formatNum(parseFloat(ksats));
+  document.getElementById('resultMsats').textContent = formatNum(msats);
+
+  const usdEquiv = btcAmount * (state.btcUsdPrice || 68000);
+  document.getElementById('resultUsdEquiv').textContent = '$' + formatNum(usdEquiv.toFixed(2));
+
+  const profitEl = document.getElementById('profitValue');
+  profitEl.textContent = (marginEarnings >= 0 ? '+' : '') + c.symbol + formatNum(Math.round(marginEarnings));
+  profitEl.className = 'profit-value ' + (marginEarnings >= 0 ? 'positive' : 'negative');
+}
+
+async function refreshRates() {
+  if (!state.country) return;
+  const btn = document.querySelector('.refresh-btn');
+  btn.textContent = '↻ Refreshing...';
+  btn.style.color = 'var(--yellow)';
+
+  await loadRates(state.country);
+  updateAll();
+
+  btn.textContent = '✓ Updated';
+  btn.style.color = 'var(--green)';
+  btn.style.borderColor = 'var(--green)';
+  setTimeout(() => {
+    btn.textContent = '↻ Refresh Rates';
+    btn.style.color = ''; btn.style.borderColor = '';
+  }, 2000);
+}
+
+init();
+</script>
+</body>
+</html>
